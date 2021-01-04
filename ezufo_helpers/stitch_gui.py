@@ -257,7 +257,7 @@ class GUI:
         if os.path.exists(self.e_tmpdir.get()):
            os.system( 'rm -r {}'.format(self.e_tmpdir.get()) )
            print "==== Directory with temporary data was removed. ==="
-        A.quit()
+        self.A.quit()
 
     def printhelp(self):
         h="Stitches images vertically\n"

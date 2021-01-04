@@ -65,7 +65,7 @@ class GUI:
         o1 = tk.Checkbutton(f2, text=tmp, variable=self.e_noflats2)
         o1.pack(side="left")
 
-        tmp="Images from Andor"
+        tmp="File names without zero padding"
         self.e_Andor = tk.BooleanVar(A, value=False)
         #tk.Checkbutton(A, text=tmp, variable=self.e_Andor)\
         #                .grid(row=r, column=0,sticky=E); r+=1
@@ -77,7 +77,7 @@ class GUI:
         b1 = tk.Button(f1, text='Convert', command=self.convert)
         b2 = tk.Button(f1, text='Undo', command=self.undo)
         b3 = tk.Button(f1, text='Help', command=self.printhelp)
-        b4 = tk.Button(f1, text='Quit', command=A.quit)
+        b4 = tk.Button(f1, text='Quit', command=self.A.quit)
         f1.grid(row=r, column = 0, columnspan = 2)
         b1.pack(side="left")
         b2.pack(side="left")
