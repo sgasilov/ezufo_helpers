@@ -9,7 +9,7 @@ import Tkinter as tk
 import tkFileDialog as filedialog
 import numpy as np
 import os
-from mview_prep import main_prep
+from ezufo_helpers.mview_main import main_prep
 
 E=tk.E; W=tk.W
 

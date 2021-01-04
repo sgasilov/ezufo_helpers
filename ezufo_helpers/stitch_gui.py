@@ -9,7 +9,7 @@ import Tkinter as tk
 import tkFileDialog as filedialog
 import numpy as np
 import os
-from ez_stitch.stitch_funcs import import main_sti_mp, main_conc_mp, main_360_mp_depth1
+from ezufo_helpers.stitch_funcs import main_sti_mp, main_conc_mp, main_360_mp_depth1
 import getpass
 
 E=tk.E; W=tk.W
