@@ -217,7 +217,7 @@ def stitch(first, second, axis, crop):
 
     return result[:,slice(int(crop),int(2*(w - axis) - crop),1)]
 
-def st_mp_idx(offst, ax, in_fmt, out_fmt, idx):
+def st_mp_idx(offst, ax, crop, in_fmt, out_fmt, idx):
     #we pass index and formats as argument
     first = read_image(in_fmt.format(idx))
     second = read_image(in_fmt.format(idx+offst))[:, ::-1]
