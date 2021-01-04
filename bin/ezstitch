@@ -1,6 +1,6 @@
 #!/usr/bin/env python2
 import Tkinter as tk
-from ez_stitch import stitch_gui
+from ezufo_helpers import stitch_gui
 
 A = tk.Tk()
 gui = stitch_gui.GUI(A)

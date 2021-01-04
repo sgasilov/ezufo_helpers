@@ -1,4 +1,4 @@
 #!/usr/bin/env python2
-from ez_360_find_overlap import ez360_search_overlap
+from ezufo_helpers import find_360_overlap
 
-ez360_search_overlap.main()
+find_360_overlap.main()
