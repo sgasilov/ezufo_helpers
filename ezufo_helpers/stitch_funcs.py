@@ -99,54 +99,6 @@ def main_sti_mp(args):
     pool.map(exec_func, J)
     print "========== Done =========="
 
-def main_i_tk(args):
-    indir, hmin, hmax, start, stop, step = prepare(args)
-    dx=int(args.reprows)
-    #second: stitch them
-    subdirs = [dI for dI in os.listdir(args.input) \
-            if os.path.isdir(os.path.join(args.input,dI))]
-    Vsteps=sorted(subdirs)
-    tmp=glob.glob(os.path.join(indir,Vsteps[0],args.typ, '*.tif'))[0]
-    first=read_image(tmp)
-    N,M=first.shape
-    Nnew=N-dx
-    Large = np.empty(( Nnew*len(Vsteps)+dx,M), dtype=np.float32)
-    ramp = np.linspace(0, 1, dx)
-
-    for j in range(int((stop-start)/step)):
-        index=start+j*step
-        for i, vstep in enumerate(Vsteps[:-1]):
-            tmp = os.path.join(indir,Vsteps[i], args.typ, '*.tif')
-            tmp1 = os.path.join(indir,Vsteps[i+1], args.typ,'*.tif')
-            if args.ort:
-                tmp = sorted(glob.glob(tmp))[j]
-                tmp1 = sorted(glob.glob(tmp1))[j]
-            else:
-                tmp = sorted(glob.glob(tmp))[index]
-                tmp1 = sorted(glob.glob(tmp1))[index]
-            first=read_image(tmp)
-            second=read_image(tmp1)
-            if args.flip: #sample moved downwards
-                first, second = np.flipud(first), np.flipud(second)
-
-            k = np.mean(first[N - dx:, :]) / np.mean(second[:dx, :])
-            #second *= k #because of read-only error on one of the servers
-            second = second * k
-
-            a, b, c = i*Nnew, (i+1)*Nnew, (i+2)*Nnew
-            Large[a:b,:] = first[:N-dx,:]
-            Large[b:b+dx,:] = np.transpose(np.transpose(first[N-dx:,:]) * (1 - ramp) + np.transpose(second[:dx,:]) * ramp)
-            Large[b+dx:c+dx,:] = second[dx:,:]
-
-        pout = os.path.join(args.output, args.typ+'-sti-{:>04}.tif'.format(index))
-        if not args.gray256:
-            tifffile.imsave(pout, Large)
-        else:
-            Large =  255.0/(hmax-hmin) * (np.clip(Large, hmin, hmax) - hmin)
-            tifffile.imsave(pout, Large.astype(np.uint8))
-
-    print "========== Done =========="
-
 def make_buf(tmp,l,a,b):
     first=read_image(tmp)
     N,M=first[a:b,:].shape
@@ -168,8 +120,8 @@ def exec_conc_mp(start, step, example_im, l, args, zfold, indir, j):
             Large[i*N:N*(i+1),:]=frame
 
     pout = os.path.join(args.output, args.typ+'-sti-{:>04}.tif'.format(index))
-    print "input data type {:}".format(dtype)
-    tifffile.imsave(pout, Large.astype(np.uint8))
+    #print "input data type {:}".format(dtype)
+    tifffile.imsave(pout, Large)
 
 def main_conc_mp(args):
     if args.ort:
