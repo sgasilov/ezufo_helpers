@@ -14,7 +14,8 @@ import os
 import shutil
 import numpy as np
 import argparse
-from concert.storage import write_libtiff, read_image
+import tifffile
+from ezufo_helpers.util import read_image
 
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__,
@@ -114,7 +115,7 @@ def main():
 
             output_img = (stitched_sino)
 
-            write_libtiff(os.path.join(proc, 'sinos', 'axis-'+str(axis).zfill(4)+'.tif'), output_img.astype(np.float32))
+            tifffile.imsave(os.path.join(proc, 'sinos', 'axis-'+str(axis).zfill(4)+'.tif'), output_img.astype(np.float32))
 
     # else:
     #     tomo_first_half_flipped = np.flip(tomo_second_half, 1)
