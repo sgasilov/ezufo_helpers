@@ -190,7 +190,7 @@ def main():
         stitched_sino = np.concatenate(sino_halves, axis=1)
 
         # crop to minimum image dimensions so that they can be opened as stack
-        output_img = (stitched_sino[:,:output_width])
+        output_img = (stitched_sino[:,(stitched_sino.shape[1]//2-output_width//2):(stitched_sino.shape[1]//2+output_width//2)])
 
         # calculate real axis for filename (adjust if it's on the right)
         if axis_on_left:
@@ -200,6 +200,7 @@ def main():
 
         tifffile.imsave(os.path.join(proc, 'sinos', 'axis-'+axis_str+'.tif'), output_img.astype(np.float32))
 
+np.concatenate()
 
     # remove output directory if it exists (to prevent blending results from different ranges in same folder)
     # otherwise make the output directory
