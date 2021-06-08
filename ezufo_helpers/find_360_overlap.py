@@ -200,8 +200,6 @@ def main():
 
         tifffile.imsave(os.path.join(proc, 'sinos', 'axis-'+axis_str+'.tif'), output_img.astype(np.float32))
 
-np.concatenate()
-
     # remove output directory if it exists (to prevent blending results from different ranges in same folder)
     # otherwise make the output directory
     if os.path.exists(output):
