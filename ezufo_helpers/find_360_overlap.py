@@ -74,166 +74,168 @@ def main():
     RR_sigma = args.RR
     read_from_cache = False
 
-    # check to see if the input path is the same as last time (and use cached sinos if so)
-    if os.path.exists(os.path.join(proc, 'cache')):
-        os.makedirs(os.path.join(proc, 'sinos'))
-        params_file_read = open(os.path.join(proc, 'cache', 'params.txt'), "r")
-        cache_input = params_file_read.read()
-        params_file_read.close()
-        if cache_input == root:
-            read_from_cache = True
-            print("same input directory used: reading sinos from chache...")
+    try:
+        # check to see if the input path is the same as last time (and use cached sinos if so)
+        if os.path.exists(os.path.join(proc, 'cache')):
+            os.makedirs(os.path.join(proc, 'sinos'))
+            params_file_read = open(os.path.join(proc, 'cache', 'params.txt'), "r")
+            cache_input = params_file_read.readlines()
+            params_file_read.close()
+            if cache_input[0] == root+'\n' and cache_input[1] == str(row_num):
+                read_from_cache = True
+                print("same input directory and row used: reading sinos from chache...")
+            else:
+                params_file = open(os.path.join(proc, 'cache', 'params.txt'), "w+")
+                params_file.writelines([root+'\n', str(row_num)])
+                params_file.close()
         else:
+            os.makedirs(os.path.join(proc, 'cache'))
+            os.makedirs(os.path.join(proc, 'sinos'))
             params_file = open(os.path.join(proc, 'cache', 'params.txt'), "w+")
-            params_file.write(root)
+            params_file.writelines([root+'\n', str(row_num)])
             params_file.close()
-    else:
-        os.makedirs(os.path.join(proc, 'cache'))
-        os.makedirs(os.path.join(proc, 'sinos'))
-        params_file = open(os.path.join(proc, 'cache', 'params.txt'), "w+")
-        params_file.write(root)
-        params_file.close()
 
-    
+        
 
 
 
-    # concatenate images end-to-end and generate a sinogram
-    if not read_from_cache:
-        print('opening half-acquisition image sequence...')
-        tomo = open_tif_sequence(os.path.join(root,'tomo'), row_num)
+        # concatenate images end-to-end and generate a sinogram
+        if not read_from_cache:
+            print('opening half-acquisition image sequence...')
+            tomo = open_tif_sequence(os.path.join(root,'tomo'), row_num)
 
-        #open flats and darks and average them (only open "flats2" if it exists, otherwise copy "flats")
-        flat = np.mean(open_tif_sequence(os.path.join(root,'flats'), row_num)/65535.0, axis=0)
-        if os.path.exists(os.path.join(root,'flats2')):
-            flat2 = np.mean(open_tif_sequence(os.path.join(root,'flats2'), row_num)/65535.0, axis=0)
+            #open flats and darks and average them (only open "flats2" if it exists, otherwise copy "flats")
+            flat = np.mean(open_tif_sequence(os.path.join(root,'flats'), row_num)/65535.0, axis=0)
+            if os.path.exists(os.path.join(root,'flats2')):
+                flat2 = np.mean(open_tif_sequence(os.path.join(root,'flats2'), row_num)/65535.0, axis=0)
+            else:
+                flat2 = flat
+            dark = np.mean(open_tif_sequence(os.path.join(root,'darks'), row_num)/65535.0, axis=0)
+
+            # set various parameters according to image dimensions
+            tomo_single_row = tomo[:,tomo.shape[1]//2,:]/65535.0
+            dark_single_row = np.tile(dark[tomo.shape[1]//2,:], (tomo.shape[0],1))
+            flat_single_row = np.zeros((tomo.shape[0], tomo.shape[2]))
+            img_height = tomo.shape[0]
+            img_width = tomo.shape[1]
+
+            # check if axis is on left or right
+            if overlap_min < tomo.shape[2]/2 and overlap_max < tomo.shape[2]/2:
+                axis_on_left = True
+                print("axis is on left-hand side of image")
+            else:
+                axis_on_left = False
+                print("axis is on right-hand side of image")
+
+
+            if not axis_on_left:
+                min_tmp = overlap_min
+                overlap_min = tomo.shape[2] - overlap_max
+                overlap_max = tomo.shape[2] - min_tmp
+
+            # dimensions used to crop all output reconstructions
+            output_width = 2 * (tomo.shape[2] - overlap_max)
+
+
+            #create interpolated sinogram of flats on the same row as we use for the projections, then carry out flat/dark correction
+            print('creating stitched sinograms...')
+            for i in range(0, img_height):
+                flat_single_row[i,:] = (flat[img_width//2,:]*(float(i)/float(img_height))+flat2[img_width//2,:]*(1.0 - float(i)/float(img_height)))
+
+            tomo_sino_corr = (tomo_single_row - dark_single_row) / (flat_single_row - dark_single_row)
+            max_gray_value = tomo_sino_corr.max()
+            tomo_sino_corr = tomo_sino_corr/max_gray_value
+
+            tomo_first_half = tomo_sino_corr[:int(tomo_sino_corr.shape[0]/2),:]
+            tomo_second_half = tomo_sino_corr[int(tomo_sino_corr.shape[0]/2):tomo_sino_corr.shape[0],:]
+
+            tomo_first_half = -1.0*np.log(tomo_first_half)
+            tomo_second_half = -1.0*np.log(tomo_second_half)
+
+            tifffile.imsave(os.path.join(proc, 'cache', 'tomo1.tif'), tomo_first_half.astype(np.float32))
+            tifffile.imsave(os.path.join(proc, 'cache', 'tomo2.tif'), tomo_second_half.astype(np.float32))
         else:
-            flat2 = flat
-        dark = np.mean(open_tif_sequence(os.path.join(root,'darks'), row_num)/65535.0, axis=0)
+            # load sinogram halves from cache folder
+            tomo_first_half = read_image(os.path.join(proc, 'cache', 'tomo1.tif')).astype(np.float32)
+            tomo_second_half = read_image(os.path.join(proc, 'cache', 'tomo2.tif')).astype(np.float32)
 
-        # set various parameters according to image dimensions
-        tomo_single_row = tomo[:,tomo.shape[1]//2,:]/65535.0
-        dark_single_row = np.tile(dark[tomo.shape[1]//2,:], (tomo.shape[0],1))
-        flat_single_row = np.zeros((tomo.shape[0], tomo.shape[2]))
-        img_height = tomo.shape[0]
-        img_width = tomo.shape[1]
-
-        # check if axis is on left or right
-        if overlap_min < tomo.shape[2]/2 and overlap_max < tomo.shape[2]/2:
-            axis_on_left = True
-            print("axis is on left-hand side of image")
-        else:
-            axis_on_left = False
-            print("axis is on right-hand side of image")
+            # check if axis is on left or right
+            if overlap_min < tomo_first_half.shape[1]/2 and overlap_max < tomo_first_half.shape[1]/2:
+                axis_on_left = True
+                print("axis is on left-hand side of image")
+            else:
+                axis_on_left = False
+                print("axis is on right-hand side of image")
 
 
+            if not axis_on_left:
+                min_tmp = overlap_min
+                overlap_min = tomo_first_half.shape[1] - overlap_max
+                overlap_max = tomo_first_half.shape[1] - min_tmp
+
+            # dimensions used to crop all output reconstructions
+            output_width = 2 * (tomo_first_half.shape[1] - overlap_max)
+
+
+        #flip half of corrected unstitched sinos (flip both first if axis is on right)
         if not axis_on_left:
-            min_tmp = overlap_min
-            overlap_min = tomo.shape[2] - overlap_max
-            overlap_max = tomo.shape[2] - min_tmp
+            tomo_first_half = np.fliplr(tomo_first_half)
+            tomo_second_half = np.fliplr(tomo_second_half)
+        tomo_second_half_flipped = np.fliplr(tomo_second_half)
 
-        # dimensions used to crop all output reconstructions
-        output_width = 2 * (tomo.shape[2] - overlap_max)
+        # concatenate halves of sinogram together for every overlap specified by input arguments
+        for axis in range(overlap_min, overlap_max, overlap_increment):
+            sino_halves = []
+            sino_halves.append(tomo_second_half_flipped[:,:tomo_second_half_flipped.shape[1] - axis])
+            sino_halves.append(tomo_first_half[:,axis:])
+            stitched_sino = np.concatenate(sino_halves, axis=1)
 
+            # crop to minimum image dimensions so that they can be opened as stack
+            output_img = (stitched_sino[:,(stitched_sino.shape[1]//2-output_width//2):(stitched_sino.shape[1]//2+output_width//2)])
 
-        #create interpolated sinogram of flats on the same row as we use for the projections, then carry out flat/dark correction
-        print('creating stitched sinograms...')
-        for i in range(0, img_height):
-            flat_single_row[i,:] = (flat[img_width//2,:]*(float(i)/float(img_height))+flat2[img_width//2,:]*(1.0 - float(i)/float(img_height)))
+            # calculate real axis for filename (adjust if it's on the right)
+            if axis_on_left:
+                axis_str = str(int(axis)).zfill(4)
+            else:
+                axis_str = str(int(tomo_second_half_flipped.shape[1]-axis)).zfill(4)
 
-        tomo_sino_corr = (tomo_single_row - dark_single_row) / (flat_single_row - dark_single_row)
-        max_gray_value = tomo_sino_corr.max()
-        tomo_sino_corr = tomo_sino_corr/max_gray_value
+            tifffile.imsave(os.path.join(proc, 'sinos', 'axis-'+axis_str+'.tif'), output_img.astype(np.float32))
 
-        tomo_first_half = tomo_sino_corr[:int(tomo_sino_corr.shape[0]/2),:]
-        tomo_second_half = tomo_sino_corr[int(tomo_sino_corr.shape[0]/2):tomo_sino_corr.shape[0],:]
-
-        tomo_first_half = -1.0*np.log(tomo_first_half)
-        tomo_second_half = -1.0*np.log(tomo_second_half)
-
-        tifffile.imsave(os.path.join(proc, 'cache', 'tomo1.tif'), tomo_first_half.astype(np.float32))
-        tifffile.imsave(os.path.join(proc, 'cache', 'tomo2.tif'), tomo_second_half.astype(np.float32))
-    else:
-        # load sinogram halves from cache folder
-        tomo_first_half = read_image(os.path.join(proc, 'cache', 'tomo1.tif')).astype(np.float32)
-        tomo_second_half = read_image(os.path.join(proc, 'cache', 'tomo2.tif')).astype(np.float32)
-
-        # check if axis is on left or right
-        if overlap_min < tomo_first_half.shape[1]/2 and overlap_max < tomo_first_half.shape[1]/2:
-            axis_on_left = True
-            print("axis is on left-hand side of image")
+        # remove output directory if it exists (to prevent blending results from different ranges in same folder)
+        # otherwise make the output directory
+        if os.path.exists(output):
+            shutil.rmtree(output)
+            os.makedirs(output)
         else:
-            axis_on_left = False
-            print("axis is on right-hand side of image")
+            os.makedirs(output)
 
+        # reconstruct all concatendated sinograms
+        print('reconstructing stitched sinograms:')
+        for filename in os.listdir(os.path.join(proc,'sinos')):
+            if '.tif' in filename:
+                
+                current_img = np.array(read_image(os.path.join(proc,'sinos',filename)))
+                axis = current_img.shape[1]/2
 
-        if not axis_on_left:
-            min_tmp = overlap_min
-            overlap_min = tomo_first_half.shape[1] - overlap_max
-            overlap_max = tomo_first_half.shape[1] - min_tmp
+                # apply 1D FFT ring removal if RR argument is not set to zero
+                if RR_sigma != 0:
+                    RR_cmd = 'ufo-launch read path={}'.format(os.path.join(proc,'sinos', filename))
+                    RR_cmd += ' ! transpose ! fft dimensions=1 ! filter-stripes1d strength={}'.format(RR_sigma)
+                    RR_cmd += ' ! ifft dimensions=1 ! transpose'
+                    RR_cmd += ' ! write filename={}'.format(enquote(os.path.join(proc,'sinos', filename)))
+                    os.system(RR_cmd)
 
-        # dimensions used to crop all output reconstructions
-        output_width = 2 * (tomo_first_half.shape[1] - overlap_max)
-
-
-    #flip half of corrected unstitched sinos (flip both first if axis is on right)
-    if not axis_on_left:
-        tomo_first_half = np.fliplr(tomo_first_half)
-        tomo_second_half = np.fliplr(tomo_second_half)
-    tomo_second_half_flipped = np.fliplr(tomo_second_half)
-
-    # concatenate halves of sinogram together for every overlap specified by input arguments
-    for axis in range(overlap_min, overlap_max, overlap_increment):
-        sino_halves = []
-        sino_halves.append(tomo_second_half_flipped[:,:tomo_second_half_flipped.shape[1] - axis])
-        sino_halves.append(tomo_first_half[:,axis:])
-        stitched_sino = np.concatenate(sino_halves, axis=1)
-
-        # crop to minimum image dimensions so that they can be opened as stack
-        output_img = (stitched_sino[:,(stitched_sino.shape[1]//2-output_width//2):(stitched_sino.shape[1]//2+output_width//2)])
-
-        # calculate real axis for filename (adjust if it's on the right)
-        if axis_on_left:
-            axis_str = str(int(axis)).zfill(4)
-        else:
-            axis_str = str(int(tomo_second_half_flipped.shape[1]-axis)).zfill(4)
-
-        tifffile.imsave(os.path.join(proc, 'sinos', 'axis-'+axis_str+'.tif'), output_img.astype(np.float32))
-
-    # remove output directory if it exists (to prevent blending results from different ranges in same folder)
-    # otherwise make the output directory
-    if os.path.exists(output):
-        shutil.rmtree(output)
-        os.makedirs(output)
-    else:
-        os.makedirs(output)
-
-    # reconstruct all concatendated sinograms
-    print('reconstructing stitched sinograms:')
-    for filename in os.listdir(os.path.join(proc,'sinos')):
-        if '.tif' in filename:
-            
-            current_img = np.array(read_image(os.path.join(proc,'sinos',filename)))
-            axis = current_img.shape[1]/2
-
-            # apply 1D FFT ring removal if RR argument is not set to zero
-            if RR_sigma != 0:
-                RR_cmd = 'ufo-launch read path={}'.format(os.path.join(proc,'sinos', filename))
-                RR_cmd += ' ! transpose ! fft dimensions=1 ! filter-stripes1d strength={}'.format(RR_sigma)
-                RR_cmd += ' ! ifft dimensions=1 ! transpose'
-                RR_cmd += ' ! write filename={}'.format(enquote(os.path.join(proc,'sinos', filename)))
-                os.system(RR_cmd)
-
-            # carry out fbp reconstruction
-            recon_cmd = 'tofu tomo  --output-bytes-per-file 0 --sinograms '+os.path.join(proc,'sinos', filename)+' --output '+os.path.join(output, filename)+' --axis '+str(axis)
-            os.system(recon_cmd)
-    
-    # delete temporary directory and remove scan from memory
-    shutil.rmtree(os.path.join(proc,'sinos'))
-    # modify permissions so that other users can delete this
-    os.system('chmod -R 777 '+proc)
-    if not read_from_cache:
-        del tomo
+                # carry out fbp reconstruction
+                recon_cmd = 'tofu tomo  --output-bytes-per-file 0 --sinograms '+os.path.join(proc,'sinos', filename)+' --output '+os.path.join(output, filename)+' --axis '+str(axis)
+                os.system(recon_cmd)
+        
+    finally:
+        # delete temporary directory and remove scan from memory
+        shutil.rmtree(os.path.join(proc,'sinos'))
+        # modify permissions so that other users can delete this
+        os.system('chmod -R 777 '+proc)
+        if not read_from_cache:
+            del tomo
 
 if __name__ == '__main__':
     main()
