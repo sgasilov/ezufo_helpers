@@ -28,8 +28,13 @@ def prepare(args):
     start, stop, step = [int(value) for value in args.slices.split(',')]
     if not os.path.exists(args.output):
         os.makedirs(args.output)
+    Vsteps = sorted(os.listdir(args.input))
+    #determine input data type
+    tmp = os.path.join(args.input, Vsteps[0], args.typ, '*.tif')
+    tmp = sorted(glob.glob(tmp))[0]
+    indtype = type(read_image(tmp)[0][0])
+
     if args.ort:
-        Vsteps=sorted( os.listdir( args.input ))
         for vstep in Vsteps:
             in_name = os.path.join(args.input, vstep, args.typ)
             out_name = os.path.join(args.tmpdir, vstep, args.typ, 'sli-%04i.tif')
@@ -43,9 +48,10 @@ def prepare(args):
         indir = args.tmpdir
     else:
         indir = args.input
-    return indir, hmin, hmax, start, stop, step
+    return indir, hmin, hmax, start, stop, step, indtype
 
-def exec_sti_mp(start, step, N,Nnew, Vsteps, indir, dx,M, args, ramp, hmin, hmax, j):
+
+def exec_sti_mp(start, step, N,Nnew, Vsteps, indir, dx,M, args, ramp, hmin, hmax, indtype, j):
     index=start+j*step
     Large = np.empty(( Nnew*len(Vsteps)+dx,M), dtype=np.float32)
     for i, vstep in enumerate(Vsteps[:-1]):
@@ -72,7 +78,7 @@ def exec_sti_mp(start, step, N,Nnew, Vsteps, indir, dx,M, args, ramp, hmin, hmax
 
     pout = os.path.join(args.output, args.typ+'-sti-{:>04}.tif'.format(index))
     if not args.gray256:
-        tifffile.imsave(pout, Large)
+        tifffile.imsave(pout, Large.astype(indtype))
     else:
         Large =  255.0/(hmax-hmin) * (np.clip(Large, hmin, hmax) - hmin)
         tifffile.imsave(pout, Large.astype(np.uint8))
@@ -80,7 +86,7 @@ def exec_sti_mp(start, step, N,Nnew, Vsteps, indir, dx,M, args, ramp, hmin, hmax
 def main_sti_mp(args):
     if args.ort:
         print "Creating orthogonal sections"
-    indir, hmin, hmax, start, stop, step = prepare(args)
+    indir, hmin, hmax, start, stop, step, indtype = prepare(args)
     dx=int(args.reprows)
     #second: stitch them
     Vsteps=sorted( os.listdir( indir ))
@@ -93,7 +99,7 @@ def main_sti_mp(args):
     J=range(int((stop-start)/step))
     pool = mp.Pool(processes=mp.cpu_count())
     exec_func = partial(exec_sti_mp, start, step, N, Nnew, \
-            Vsteps, indir, dx,M, args, ramp, hmin, hmax)
+            Vsteps, indir, dx,M, args, ramp, hmin, hmax, indtype)
     print "Adjusting and stitching"
     #start = time.time()
     pool.map(exec_func, J)
@@ -127,7 +133,7 @@ def main_conc_mp(args):
     if args.ort:
         print "Creating orthogonal sections"
     #start = time.time()
-    indir, hmin, hmax, start, stop, step = prepare(args)
+    indir, hmin, hmax, start, stop, step, indtype = prepare(args)
     #if args.ort:
     #    print "Orthogonal sections created in {:.01f} sec".format(time.time()-start)
     subdirs = [dI for dI in os.listdir(args.input) \
